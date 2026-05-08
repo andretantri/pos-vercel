@@ -6,6 +6,9 @@ export default function Admin() {
   const [password, setPassword] = useState('');
   const [invoiceNo, setInvoiceNo] = useState('');
   const [amount, setAmount] = useState('');
+  const [merchantCode, setMerchantCode] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -16,10 +19,33 @@ export default function Admin() {
     }
   };
 
-  const handleCreateInvoice = (e) => {
+  const handleCreateInvoice = async (e) => {
     e.preventDefault();
-    alert(`Membentuk invoice ${invoiceNo} dengan nominal Rp ${amount}. Callback ke Duitku akan diproses.`);
-    // TODO: Integrasi API Duitku di sini
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceNo, amount, merchantCode, apiKey })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Invoice berhasil dibuat!');
+        // Redirect ke halaman pembayaran Duitku
+        window.location.href = data.paymentUrl;
+      } else {
+        alert(`Gagal membuat invoice: ${data.message}`);
+        console.error(data.errorDetails);
+      }
+    } catch (error) {
+      alert('Terjadi kesalahan pada sistem.');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -76,7 +102,31 @@ export default function Admin() {
                 className="admin-input"
               />
             </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>Proses VA / Callback</button>
+            <div className="form-group">
+              <label>Merchant Code Duitku</label>
+              <input 
+                type="text" 
+                value={merchantCode}
+                onChange={(e) => setMerchantCode(e.target.value)}
+                placeholder="Contoh: D12345"
+                required
+                className="admin-input"
+              />
+            </div>
+            <div className="form-group">
+              <label>API Key Duitku</label>
+              <input 
+                type="text" 
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Masukkan API Key Duitku..."
+                required
+                className="admin-input"
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={isLoading}>
+              {isLoading ? 'Memproses...' : 'Proses VA / Callback'}
+            </button>
           </form>
         </div>
       </div>
