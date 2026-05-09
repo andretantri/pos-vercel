@@ -1,6 +1,15 @@
-import crypto from 'crypto';
+import { createHash } from 'crypto';
 
 export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
@@ -9,29 +18,27 @@ export default async function handler(req, res) {
     const { invoiceNo, amount, merchantCode, apiKey } = req.body;
 
     if (!invoiceNo || !amount || !merchantCode || !apiKey) {
-      return res.status(400).json({ message: 'Data tidak lengkap' });
+      return res.status(400).json({ success: false, message: 'Data tidak lengkap' });
     }
 
-    // Menggunakan API Duitku POP (Payment Page Hosted)
-    // Signature = SHA256(merchantCode + timestamp + apiKey)
+    // Duitku POP: Signature = SHA256(merchantCode + timestamp + apiKey)
     const timestamp = Date.now().toString();
-    const signatureStr = `${merchantCode}${timestamp}${apiKey}`;
-    const signature = crypto.createHash('sha256').update(signatureStr).digest('hex');
+    const signature = createHash('sha256')
+      .update(merchantCode + timestamp + apiKey)
+      .digest('hex');
 
-    // Payload untuk Duitku POP
     const payload = {
       paymentAmount: parseInt(amount),
       merchantOrderId: invoiceNo,
       productDetails: `Pembayaran Invoice ${invoiceNo}`,
-      email: 'customer@example.com', // Opsional, bisa disesuaikan
-      phoneNumber: '08123456789', // Opsional
+      email: 'customer@example.com',
+      phoneNumber: '08123456789',
       additionalParam: '',
       merchantUserInfo: '',
       customerVaName: 'Pelanggan',
       callbackUrl: `https://${req.headers.host}/api/callback`,
       returnUrl: `https://${req.headers.host}/`,
-      expiryPeriod: 60, // 60 menit
-      // Item details diperlukan untuk POP
+      expiryPeriod: 60,
       itemDetails: [
         {
           name: `Tagihan ${invoiceNo}`,
@@ -39,7 +46,6 @@ export default async function handler(req, res) {
           quantity: 1
         }
       ],
-      // Customer details diperlukan untuk POP
       customerDetail: {
         firstName: 'Pelanggan',
         lastName: '',
@@ -48,8 +54,8 @@ export default async function handler(req, res) {
       }
     };
 
-    // URL Duitku POP Sandbox
-    // Gunakan https://api-prod.duitku.com/api/merchant/createInvoice untuk Production
+    // Duitku POP Sandbox
+    // Production: https://api-prod.duitku.com/api/merchant/createInvoice
     const duitkuUrl = 'https://api-sandbox.duitku.com/api/merchant/createInvoice';
 
     const response = await fetch(duitkuUrl, {
@@ -63,17 +69,25 @@ export default async function handler(req, res) {
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Response dari Duitku tidak valid',
+        rawResponse: responseText 
+      });
+    }
 
     if (response.ok && data.statusCode === '00') {
-      // Sukses mendapat URL pembayaran
       return res.status(200).json({ 
         success: true, 
         paymentUrl: data.paymentUrl,
         reference: data.reference
       });
     } else {
-      // Gagal dari Duitku
       return res.status(400).json({ 
         success: false, 
         message: data.statusMessage || 'Gagal membuat tagihan Duitku',
@@ -83,6 +97,9 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error creating invoice:', error);
-    return res.status(500).json({ success: false, message: 'Internal Server Error', error: error.message });
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal Server Error'
+    });
   }
 }
