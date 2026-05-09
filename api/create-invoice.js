@@ -12,40 +12,53 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: 'Data tidak lengkap' });
     }
 
-    // Hitung signature sesuai dokumentasi Duitku:
-    // MD5(merchantCode + merchantOrderId + paymentAmount + apiKey)
-    const signatureStr = `${merchantCode}${invoiceNo}${amount}${apiKey}`;
-    const signature = crypto.createHash('md5').update(signatureStr).digest('hex');
+    // Menggunakan API Duitku POP (Payment Page Hosted)
+    // Signature = SHA256(merchantCode + timestamp + apiKey)
+    const timestamp = Date.now().toString();
+    const signatureStr = `${merchantCode}${timestamp}${apiKey}`;
+    const signature = crypto.createHash('sha256').update(signatureStr).digest('hex');
 
-    // Waktu expiry dalam menit (opsional, contoh: 60 menit)
-    const expiryPeriod = 60; 
-
-    // Payload untuk dikirim ke Duitku
+    // Payload untuk Duitku POP
     const payload = {
-      merchantCode: merchantCode,
       paymentAmount: parseInt(amount),
-      paymentMethod: 'VC', // Contoh: Credit Card, atau 'M2' untuk Mandiri VA, 'B1' BCA VA. Biarkan kosong jika redirect ke Payment Page Duitku, tapi Duitku API v2 membutuhkan paymentMethod jika langsung.
-      // Jika ingin diarahkan ke halaman pembayaran Duitku (Payment Page), kita pakai API Create Invoice
       merchantOrderId: invoiceNo,
       productDetails: `Pembayaran Invoice ${invoiceNo}`,
-      email: 'customer@example.com', // Opsional tapi sering diwajibkan, sesuaikan jika ada
+      email: 'customer@example.com', // Opsional, bisa disesuaikan
       phoneNumber: '08123456789', // Opsional
       additionalParam: '',
       merchantUserInfo: '',
-      customerVaName: 'Customer', // Nama yang muncul di VA
+      customerVaName: 'Pelanggan',
       callbackUrl: `https://${req.headers.host}/api/callback`,
       returnUrl: `https://${req.headers.host}/`,
-      signature: signature,
-      expiryPeriod: expiryPeriod
+      expiryPeriod: 60, // 60 menit
+      // Item details diperlukan untuk POP
+      itemDetails: [
+        {
+          name: `Tagihan ${invoiceNo}`,
+          price: parseInt(amount),
+          quantity: 1
+        }
+      ],
+      // Customer details diperlukan untuk POP
+      customerDetail: {
+        firstName: 'Pelanggan',
+        lastName: '',
+        email: 'customer@example.com',
+        phoneNumber: '08123456789'
+      }
     };
 
-    // Duitku Sandbox URL (gunakan https://passport.duitku.com/webapi/api/merchant/v2/inquiry untuk production)
-    const duitkuUrl = 'https://sandbox.duitku.com/webapi/api/merchant/v2/inquiry';
+    // URL Duitku POP Sandbox
+    // Gunakan https://api-prod.duitku.com/api/merchant/createInvoice untuk Production
+    const duitkuUrl = 'https://api-sandbox.duitku.com/api/merchant/createInvoice';
 
     const response = await fetch(duitkuUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-duitku-signature': signature,
+        'x-duitku-timestamp': timestamp,
+        'x-duitku-merchantcode': merchantCode
       },
       body: JSON.stringify(payload)
     });
