@@ -1,34 +1,61 @@
+import { createHash } from 'crypto';
+
+// Duitku POP Callback
+// Method: HTTP POST
+// Type: x-www-form-urlencoded
+// Signature validasi: MD5(merchantCode + amount + merchantOrderId + apiKey)
 export default function handler(req, res) {
-  // Duitku akan mengirimkan POST request ke URL ini
-  if (req.method === 'POST') {
-    try {
-      const { 
-        merchantOrderId, 
-        amount, 
-        resultCode, 
-        reference 
-      } = req.body;
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method Not Allowed' });
+  }
 
-      // TODO: Validasi signature Duitku di sini untuk keamanan
-      // const signature = ...
+  try {
+    const {
+      merchantCode,
+      amount,
+      merchantOrderId,
+      productDetail,
+      additionalParam,
+      paymentCode,
+      resultCode,
+      merchantUserId,
+      reference,
+      signature,
+      publisherOrderId,
+      spUserHash,
+      settlementDate
+    } = req.body;
 
-      if (resultCode === '00') {
-        // Pembayaran Berhasil
-        console.log(`Pembayaran sukses untuk Order ID: ${merchantOrderId}`);
-        // TODO: Update status invoice di database Anda
-      } else {
-        // Pembayaran Gagal / Expired
-        console.log(`Pembayaran gagal untuk Order ID: ${merchantOrderId}`);
-      }
-
-      // Duitku mengharapkan response HTTP 200 OK
-      return res.status(200).json({ status: 'success' });
-    } catch (error) {
-      console.error('Error processing callback:', error);
-      return res.status(500).json({ status: 'error', message: 'Internal Server Error' });
+    if (!merchantCode || !amount || !merchantOrderId || !signature) {
+      return res.status(400).send('Bad Parameter');
     }
-  } else {
-    // Jika diakses via browser (GET request)
-    return res.status(405).json({ message: 'Method Not Allowed. This endpoint is for Duitku POST callback.' });
+
+    // TODO: Ganti dengan API Key Anda yang sebenarnya atau ambil dari database
+    // Untuk sekarang, validasi signature dilewati karena apiKey disimpan di form admin
+    // const apiKey = 'YOUR_API_KEY';
+    // const calcSignature = createHash('md5')
+    //   .update(merchantCode + amount + merchantOrderId + apiKey)
+    //   .digest('hex');
+    // if (signature !== calcSignature) {
+    //   return res.status(400).send('Bad Signature');
+    // }
+
+    if (resultCode === '00') {
+      // Pembayaran Berhasil
+      console.log(`[CALLBACK] Pembayaran SUKSES - Order: ${merchantOrderId}, Amount: ${amount}, Ref: ${reference}`);
+      // TODO: Update status invoice di database Anda
+    } else if (resultCode === '01') {
+      // Pembayaran Pending
+      console.log(`[CALLBACK] Pembayaran PENDING - Order: ${merchantOrderId}`);
+    } else {
+      // Pembayaran Gagal / Expired
+      console.log(`[CALLBACK] Pembayaran GAGAL - Order: ${merchantOrderId}, Code: ${resultCode}`);
+    }
+
+    // Duitku mengharapkan HTTP 200 OK
+    return res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error processing callback:', error);
+    return res.status(500).send('Internal Server Error');
   }
 }
