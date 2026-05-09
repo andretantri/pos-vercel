@@ -37,8 +37,9 @@ export default function Admin() {
         // Redirect ke halaman pembayaran Duitku
         window.location.href = data.paymentUrl;
       } else {
-        alert(`Gagal membuat invoice: ${data.message}`);
-        console.error(data.errorDetails);
+        const detail = data.errorDetails ? JSON.stringify(data.errorDetails, null, 2) : '';
+        alert(`Gagal membuat invoice:\n${data.message}\n\nDetail:\n${detail}`);
+        console.error('Error details:', data);
       }
     } catch (error) {
       alert('Terjadi kesalahan pada sistem.');
